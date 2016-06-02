@@ -2,11 +2,14 @@ package vrf
 
 import (
 	"github.com/dedis/crypto/abstract"
-	"github.com/dedis/crypto/edwards/ed25519"
+	"github.com/dedis/crypto/edwards"
+	// optimized edwards implementation (lacking full implementation of the elligator map)
+	// "github.com/dedis/crypto/edwards/ed25519"
 	"github.com/dedis/crypto/random"
 )
 
-var suite = ed25519.NewAES128SHA256Ed25519(false)
+var suite = edwards.NewAES128SHA256Ed25519(true)
+//var suite = ed25519.NewAES128SHA256Ed25519(true)
 
 func Compute(m []byte, sk abstract.Secret) abstract.Point {
 	// H(m)^k
@@ -65,18 +68,27 @@ func hashToCurve(m []byte) abstract.Point {
 	defer h.Reset()
 	h.Write(m)
 	hmb := h.Sum(nil)
-	// XXX map computed hash bytes to curve point:
+	// naive approach: ~0 times slower then elligator map
 	P, _ := suite.Point().Pick(hmb, suite.Cipher(hmb))
-	// P, _ := suite.Point().Pick(hmb, random.Stream)
-	// fmt.Println("DBG: remaining bytes=", len(rem))
 
-	// Nicolas: Try following alternative: use h2(m) -> abstract.Secret x
-	// and then do g^x
+
 	return P
 }
 
+func hashToCurveElligator(m []byte) abstract.Point {
+	P := suite.Point()
+	Ph := P.(abstract.Hiding)
+	hash := suite.Hash()
+	hash.Write(m)
+	hmb := hash.Sum(nil)
+
+	Ph.HideDecode(hmb)
+	return  P
+}
+
 func h1(m []byte) abstract.Point {
-	return hashToCurve(m)
+	return hashToCurveElligator(m)
+	// return hashToCurve(m)
 }
 
 func h2(m []byte, gr abstract.Point, hr abstract.Point) abstract.Secret {
